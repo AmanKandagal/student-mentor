@@ -21,60 +21,45 @@ public class MentorshipRequestService {
     private final UserRepository userRepository;
     private final MentorshipRequestRepository requestRepository;
     private final StudentProfileRepository studentProfileRepository;
+    private final MatchingService advancedMatchingService;
 
     private MentorshipResponseDto mapToDto(MentorshipRequest request) {
-        
         String resumeUrl = null;
         String linkedinUrl = null;
-        
         Optional<StudentProfile> profile = studentProfileRepository.findByUserId(request.getStudent().getId());
-        
         if (profile.isPresent()) {
             resumeUrl = profile.get().getResumeUrl();
             linkedinUrl = profile.get().getLinkedinUrl();
         }
-
         return MentorshipResponseDto.builder()
                 .requestId(request.getId())
                 .message(request.getMessage())
                 .status(request.getStatus())
                 .createdAt(request.getCreatedAt())
-                
-                // Student Data (From User Entity)
                 .studentId(request.getStudent().getId())
                 .studentName(request.getStudent().getName())
                 .studentEmail(request.getStudent().getEmail())
-                
-                // URLs (From StudentProfile Entity)
                 .studentResumeUrl(resumeUrl)
                 .studentLinkedinUrl(linkedinUrl)
-                
-                // Mentor Data
                 .mentorId(request.getMentor().getId())
                 .mentorName(request.getMentor().getName())
                 .build();
-    }  
+    }
 
     public MentorshipResponseDto sendRequest(MentorshipRequestDto dto) {
         if(dto.getStudentId().equals(dto.getMentorId())){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot request yourself");
         }
 
+        if (advancedMatchingService.isAlreadyConnected(dto.getStudentId(), dto.getMentorId())) {
+             System.out.println("⚡ FAST REJECT: Request blocked by In-Memory Graph.");
+             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request already sent or connected.");
+        }
+
         User student = userRepository.findById(dto.getStudentId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Student not found"));
-        
         User mentor = userRepository.findById(dto.getMentorId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentor not found"));
-
-        boolean alreadyPending = requestRepository.existsByStudentAndMentorAndStatus(student, mentor, RequestStatus.PENDING);
-        if (alreadyPending) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request already pending");
-        }
-        
-        boolean alreadyAccepted = requestRepository.existsByStudentAndMentorAndStatus(student, mentor, RequestStatus.ACCEPTED);
-        if (alreadyAccepted) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You are already connected");
-        }
 
         MentorshipRequest request = MentorshipRequest.builder()
                 .student(student)
@@ -85,62 +70,40 @@ public class MentorshipRequestService {
                 .build();
 
         MentorshipRequest savedRequest = requestRepository.save(request);
+        
+        advancedMatchingService.addConnection(student.getId(), mentor.getId());
+        
         return mapToDto(savedRequest);
     }
 
     public List<MentorshipResponseDto> getRequestsForMentor(Long mentorId) {
-        User mentor = userRepository.findById(mentorId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentor not found"));
-        return requestRepository.findByMentor(mentor).stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
+        User mentor = userRepository.findById(mentorId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentor not found"));
+        return requestRepository.findByMentor(mentor).stream().map(this::mapToDto).collect(Collectors.toList());
     }
-
     public List<MentorshipResponseDto> getRequestsForStudent(Long studentId) {
-        User student = userRepository.findById(studentId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Student not found"));
-        return requestRepository.findByStudent(student).stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
+        User student = userRepository.findById(studentId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Student not found"));
+        return requestRepository.findByStudent(student).stream().map(this::mapToDto).collect(Collectors.toList());
     }
-
     public MentorshipResponseDto acceptRequest(Long requestId) {
-        MentorshipRequest req = requestRepository.findById(requestId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found"));
-
+        MentorshipRequest req = requestRepository.findById(requestId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found"));
         req.setStatus(RequestStatus.ACCEPTED);
         return mapToDto(requestRepository.save(req));
     }
-
     public MentorshipResponseDto declineRequest(Long requestId) {
-        MentorshipRequest req = requestRepository.findById(requestId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found"));
-
+        MentorshipRequest req = requestRepository.findById(requestId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found"));
         req.setStatus(RequestStatus.DECLINED);
         return mapToDto(requestRepository.save(req));
     }
-    
     public List<MentorshipResponseDto> getPendingForMentor(Long mentorId) {
-        User mentor = userRepository.findById(mentorId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentor not found"));
-        return requestRepository.findByMentorAndStatus(mentor, RequestStatus.PENDING).stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
+        User mentor = userRepository.findById(mentorId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentor not found"));
+        return requestRepository.findByMentorAndStatus(mentor, RequestStatus.PENDING).stream().map(this::mapToDto).collect(Collectors.toList());
     }
-
     public List<MentorshipResponseDto> getAcceptedForMentor(Long mentorId) {
-        User mentor = userRepository.findById(mentorId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentor not found"));
-        return requestRepository.findByMentorAndStatus(mentor, RequestStatus.ACCEPTED).stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
+        User mentor = userRepository.findById(mentorId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentor not found"));
+        return requestRepository.findByMentorAndStatus(mentor, RequestStatus.ACCEPTED).stream().map(this::mapToDto).collect(Collectors.toList());
     }
-
     public List<MentorshipResponseDto> getDeclinedForMentor(Long mentorId) {
-        User mentor = userRepository.findById(mentorId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentor not found"));
-        return requestRepository.findByMentorAndStatus(mentor, RequestStatus.DECLINED).stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
+        User mentor = userRepository.findById(mentorId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentor not found"));
+        return requestRepository.findByMentorAndStatus(mentor, RequestStatus.DECLINED).stream().map(this::mapToDto).collect(Collectors.toList());
     }
 }

@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -11,11 +11,10 @@ import { LoginRequest } from '../../models/auth.model';
   imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './login.html',
   styles: [`
-    /* Animation Keyframes */
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-    
+
     .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
     .animate-slideUp { animation: slideUp 0.6s ease-out forwards; }
     .animate-shake { animation: shake 0.3s ease-in-out; }
@@ -26,16 +25,22 @@ export class LoginComponent {
   isLoading = false;
   errorMessage = '';
 
-  constructor(private authService: AuthService, private router: Router) {}
+  constructor(
+    private authService: AuthService,
+    private router: Router,
+    private cdr: ChangeDetectorRef   // ✅ Inject CDR
+  ) {}
 
   onSubmit() {
     if (!this.loginData.email || !this.loginData.password) {
       this.errorMessage = 'Please fill in all fields';
+      this.cdr.detectChanges();      // ✅ Trigger UI update
       return;
     }
 
     this.isLoading = true;
     this.errorMessage = '';
+    this.cdr.detectChanges();        // ✅ Update loading state
 
     this.authService.login(this.loginData).subscribe({
       next: (res) => {
@@ -44,7 +49,7 @@ export class LoginComponent {
         }
 
         const role = this.authService.getRole();
-        
+
         if (role === 'MENTOR') {
           this.router.navigate(['/mentor-dashboard']);
         } else if (role === 'STUDENT') {
@@ -52,12 +57,14 @@ export class LoginComponent {
         } else {
           this.errorMessage = 'Role not recognized.';
         }
-        
+
         this.isLoading = false;
+        this.cdr.detectChanges();    // ✅ Reflect success UI changes
       },
       error: (err) => {
         this.errorMessage = err.error?.message || 'Invalid email or password.';
         this.isLoading = false;
+        this.cdr.detectChanges();    // ✅ Reflect error UI changes
       }
     });
   }

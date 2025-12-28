@@ -8,7 +8,6 @@ import { LoginRequest, RegisterRequest, AuthResponse } from '../models/auth.mode
   providedIn: 'root'
 })
 export class AuthService {
-  // Matches your backend @RequestMapping("/auth")
   private baseUrl = 'http://localhost:8080/auth';
 
   constructor(private http: HttpClient) {}
@@ -21,11 +20,9 @@ export class AuthService {
     return this.http.post<AuthResponse>(`${this.baseUrl}/login`, data).pipe(
       tap(response => {
         if (response.token) {
-          // Store the token immediately
           localStorage.setItem('token', response.token);
           
-          // Decode the token to get userId and role
-          // This assumes your backend puts 'role' and 'userId' (or 'id') in the claims
+          
           try {
             const decoded: any = jwtDecode(response.token);
             localStorage.setItem('role', decoded.role);
@@ -40,10 +37,8 @@ export class AuthService {
 
   logout() {
     localStorage.clear();
-    // Ideally redirect to login page here
   }
 
-  // Helper methods to get data anywhere in the app
   getToken() { return localStorage.getItem('token'); }
   getRole() { return localStorage.getItem('role'); }
   getUserId() { return localStorage.getItem('userId'); }
