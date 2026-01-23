@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+
+//HI
 @RestController
 @RequestMapping("/api/chat")
 @CrossOrigin(origins = "http://localhost:4200") // Allow Angular to access
